@@ -1,0 +1,113 @@
+C:\WINDOWS\system32>pyspark
+Python 3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 64 bit (AMD64)] on win32
+Type "help", "copyright", "credits" or "license" for more information.
+WARNING: Using incubator modules: jdk.incubator.vector
+Using Spark's default log4j profile: org/apache/spark/log4j2-defaults.properties
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /__ / .__/\_,_/_/ /_/\_\   version 4.1.1
+      /_/
+
+Using Python version 3.14.2 (tags/v3.14.2:df79316, Dec  5 2025 17:18:21)
+Spark context Web UI available at http://LAPTOP-2IA8PRMB:4040
+Spark context available as 'sc' (master = local[*], app id = local-1768838820821).
+SparkSession available as 'spark'.
+>>> from pyspark.sql.functions import lit, to_date, col, desc, lag, max as spark_max, when, isnan, round
+>>> from pyspark.sql.window import Window
+>>> spark = SparkSession.builder \
+...     .appName("COVID Analysis") \
+...         .config("spark.sql.adaptive.enabled", "true") \
+...             .getOrCreate()
+26/01/19 19:08:28 WARN SparkSession: Using an existing Spark session; only runtime SQL configurations will take effect.
+>>> df = spark.read.option("header", "true").csv(r"C:\Users\Egor\Desktop\Нетология\Apache_spark\covid-data.csv", inferSchema=True)
+>>>
+
+>>> df_31mar = df.filter(to_date(col("date"), "yyyy-MM-dd") == to_date(lit("2021-03-31"), "yyyy-MM-dd"))
+>>> top15_pct = df_31mar.select("iso_code","location",round((col("total_cases")/col("population")*100),2).alias("percent")).filter((col("population").isNotNull(\)) & (col("total_cases").isNotNull())).orderBy(col("percent").desc()).limit(15)
+>>> top15_pct.show()
++--------+-------------+-------+
+|iso_code|     location|percent|
++--------+-------------+-------+
+|     AND|      Andorra|  15.54|
+|     MNE|   Montenegro|  14.52|
+|     CZE|      Czechia|  14.31|
+|     SMR|   San Marino|  13.94|
+|     SVN|     Slovenia|  10.37|
+|     LUX|   Luxembourg|   9.85|
+|     ISR|       Israel|   9.63|
+|     USA|United States|    9.2|
+|     SRB|       Serbia|   8.83|
+|     BHR|      Bahrain|   8.49|
+|     PAN|       Panama|   8.23|
+|     PRT|     Portugal|   8.06|
+|     EST|      Estonia|   8.02|
+|     SWE|       Sweden|   7.97|
+|     LTU|    Lithuania|   7.94|
++--------+-------------+-------+
+
+>>> top15_pct.coalesce(1).write.mode("overwrite").option("header", "true").csv(r"C:\Users\Egor\Desktop\Нетология\Apache_spark\top15_recovered.csv")
+>>> df_week = df.filter(to_date(col("date"), "yyyy-MM-dd").between(
+...     to_date(lit("2021-03-25"), "yyyy-MM-dd"),
+...         to_date(lit("2021-03-31"), "yyyy-MM-dd")))
+>>> top10 = df_week.groupBy("location").agg(spark_max("new_cases").alias("max_new_cases")) \
+...     .orderBy("max_new_cases", ascending=False).limit(10)
+>>> top10.show()
++--------------+-------------+
+|      location|max_new_cases|
++--------------+-------------+
+|         World|     683205.0|
+|        Europe|     255985.0|
+|European Union|     216452.0|
+|          Asia|     183350.0|
+| South America|     148476.0|
+|        Brazil|     100158.0|
+| North America|      93350.0|
+| United States|      77321.0|
+|         India|      72330.0|
+|        France|      59054.0|
++--------------+-------------+
+
+>>> top10.coalesce(1).write.mode("overwrite").option("header", "true").csv(r"C:\Users\Egor\Desktop\Нетология\Apache_spark\top10_max_cases.csv")
+>>> russia = df.filter((col("location") == "Russia") &
+...                    to_date(col("date"), "yyyy-MM-dd").between(
+...                                           to_date(lit("2021-03-24"), "yyyy-MM-dd"),
+...                                                                  to_date(lit("2021-03-31"), "yyyy-MM-dd"))) \
+...                                                                      .select("date", "new_cases").orderBy("date")
+>>>
+>>> w = Window.orderBy("date")
+>>> russia_delta = russia.withColumn("prev_cases", lag("new_cases").over(w)) \
+...     .withColumn("delta", col("new_cases") - col("prev_cases")) \
+...         .select(to_date("date").alias("date"), "prev_cases", "new_cases", "delta").na.drop()
+>>> russia_delta.show()
+26/01/19 19:10:58 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:10:58 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:10:58 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:10:59 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:10:59 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:10:59 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:10:59 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
++----------+----------+---------+------+
+|      date|prev_cases|new_cases| delta|
++----------+----------+---------+------+
+|2021-03-25|    8769.0|   9128.0| 359.0|
+|2021-03-26|    9128.0|   9073.0| -55.0|
+|2021-03-27|    9073.0|   8783.0|-290.0|
+|2021-03-28|    8783.0|   8979.0| 196.0|
+|2021-03-29|    8979.0|   8589.0|-390.0|
+|2021-03-30|    8589.0|   8162.0|-427.0|
+|2021-03-31|    8162.0|   8156.0|  -6.0|
++----------+----------+---------+------+
+
+>>> russia_delta.coalesce(1).write.mode("overwrite").option("header", "true").csv(r"C:\Users\Egor\Desktop\Нетология\Apache_spark\russia_delta.csv")
+26/01/19 19:11:07 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:11:07 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:11:07 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:11:08 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:11:08 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:11:08 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/01/19 19:11:08 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+>>>
